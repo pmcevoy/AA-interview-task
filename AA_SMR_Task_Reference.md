@@ -56,21 +56,41 @@ and lost notes between mechanics.
 
 ## Technical Requirements
 
-### Stack (pick one — both equally acceptable)
+### Stack — **Option B: Blazor Server (.NET 8)**
 
-- **Option A:** React frontend + C# / .NET 8 Web API backend
-- **Option B:** Blazor Server (.NET 8) — single project, or Blazor + REST service
+Chosen over React + Web API to stay entirely within C#/.NET — no JavaScript context-switching. Blazor Server's SignalR connection also gives natural real-time slot availability without polling.  A single application project serving UI and API.
 
-### Data
+### Data Access — **Dapper**
 
-- **Database:** SQL Server localhost (LocalDB or containerised)
-- **ORM:** Entity Framework Core (or Dapper — your choice)
-- **Schema:** Applied via EF migrations or startup script — app must self-initialise on first run
-- **Seed data:** A few mechanics, service types, and slots so the app is usable immediately
+Chosen over EF Core deliberately. Dapper keeps SQL visible and explicit; no ORM magic obscuring what hits the database. Aligns with the view that "fat" ORMs are appropriate to hide from developers, not architects.
+
+### Database — **Containerised SQL Server**
+
+Consistent, reproducible, no LocalDB quirks. One `docker compose up` runs everything.
+
+### Schema Management — **Plain versioned `.sql` scripts, run idempotently**
+
+No migration framework (DbUp, Flyway, etc.). Scripts are numbered sequentially:
+
+```
+db/migrations/
+  001_create_schema.sql
+  002_seed_data.sql
+```
+
+All DDL uses `IF NOT EXISTS` guards. All seed data uses `IF NOT EXISTS` / `MERGE` so scripts are safe to re-run on container restart. An entrypoint wrapper script on the SQL Server container executes them in order on first boot.
+
+**Rationale:** In a production context a DBA needs to read, review, and potentially optimise these scripts before they touch a production server. Plain SQL with no tooling dependency is the only format that works universally — for a pipeline, for a DBA, and for a container init. The idempotency guards mean a pipeline re-run or container restart won't break anything.
 
 ### Docker
 
-- `docker-compose.yml` and any required `Dockerfile`s if Docker is used
+Three services in `docker-compose.yml`:
+
+| Service | Purpose |
+|---|---|
+| `db` | SQL Server container |
+| `migrator` | Entrypoint script runs numbered `.sql` files via `sqlcmd`; exits when done |
+| `app` | Blazor Server; `depends_on: migrator` |
 
 ---
 
@@ -107,24 +127,22 @@ and lost notes between mechanics.
 
 ---
 
-## Key Decisions to Make Before Starting
+## Decisions Summary
 
-| Decision | Options |
-|---|---|
-| Stack | Option A (React + .NET API) vs Option B (Blazor Server) |
-| ORM | EF Core vs Dapper |
-| DB setup | LocalDB vs containerised SQL Server |
-| Auth stand-in | "Act as" user dropdown |
-| Docker | Yes / No |
+| Decision | Chosen | Rationale |
+|---|---|---|
+| Stack | Blazor Server (.NET 8) | Stay in C#/.NET end to end; no JS; SignalR suits real-time slot updates |
+| Data access | Dapper | Explicit SQL; no ORM abstraction hiding database behaviour |
+| Database | Containerised SQL Server | Consistent, reproducible, no LocalDB quirks |
+| Schema management | Plain versioned `.sql` scripts | DBA-readable, no tooling dependency, idempotent with `IF NOT EXISTS` guards |
+| Auth stand-in | "Act as" user dropdown | Per spec — out of scope for real auth |
+| Docker | Yes — three services | `db`, `migrator`, `app` |
 
 ---
 
 ## Notes / Planning
 
-> _Use this section to capture your own pre-build decisions and prompting strategy._
-
-- **Stack chosen:**
-- **Rationale:**
-- **Initial prompt approach:**
-- **Commit strategy:**
-- **What I'll write by hand:**
+- **Commit strategy:** Small, descriptive commits per logical unit — schema, models, booking flow, mechanic flow, admin view, docker setup, README
+- **What to write by hand:** SQL migration scripts (DBA-quality, reviewed carefully); docker-compose.yml structure
+- **What to delegate to Claude Code:** Blazor component scaffolding, Dapper repository boilerplate, service layer wiring, seed data population
+- **Out of scope to note in README:** Auth, notifications, rescheduling/cancellation, recurring appointments, payments, mobile UI
