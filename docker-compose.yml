@@ -29,7 +29,18 @@ services:
     volumes:
       - ./db/migrations:/migrations:ro
     environment:
+      AA_TASK_APP_PASSWORD: "${AA_TASK_APP_PASSWORD}"
       AA_TASK_MSSQL_SA_PASSWORD: "${AA_TASK_MSSQL_SA_PASSWORD}"
+
+  app:
+    build: ./app
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__SmrScheduler: "Server=db,1433;Database=SmrScheduler;User Id=smr_app;Password=${AA_TASK_APP_PASSWORD};TrustServerCertificate=True"
 
 volumes:
   db_data:
