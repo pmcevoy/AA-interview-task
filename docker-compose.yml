@@ -6,14 +6,17 @@ services:
     # e.g. mcr.microsoft.com/mssql/server:2022-CU13-ubuntu-22.04
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "${SA_PASSWORD}"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
       MSSQL_DB: "SmrScheduler"
     ports:
       - "1433:1433"
     volumes:
       - db_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SA_PASSWORD}", "-Q", "SELECT 1"]
+      # Per MS docs: grep errorlog for "ready for client connections" message
+      # Avoids sqlcmd path uncertainty (moved from mssql-tools to mssql-tools18 in recent CUs)
+      # https://learn.microsoft.com/en-us/sql/linux/quickstart-install-connect-docker?view=sql-server-ver17&tabs=cli&pivots=cs1-bash#view-list-of-containers-3
+      test: ["CMD-SHELL", "cat /var/opt/mssql/log/errorlog | grep -q 'SQL Server is now ready for client connections'"]
       interval: 10s
       timeout: 5s
       retries: 10
