@@ -7,6 +7,8 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "${AA_TASK_MSSQL_SA_PASSWORD}"
+      MSSQL_USER: smr_app
+      MSSQL_PASSWORD: "${AA_TASK_APP_PASSWORD}"
     ports:
       - "1433:1433"
     volumes:
@@ -29,7 +31,6 @@ services:
     volumes:
       - ./db/migrations:/migrations:ro
     environment:
-      AA_TASK_APP_PASSWORD: "${AA_TASK_APP_PASSWORD}"
       AA_TASK_MSSQL_SA_PASSWORD: "${AA_TASK_MSSQL_SA_PASSWORD}"
 
   volume-init:

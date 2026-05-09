@@ -43,8 +43,7 @@ container is ready before this container starts.
 
 ## Migration Runner Script (`run-migrations.sh`)
 
-- Before running any files: create the `smr_app` server login via `sqlcmd -Q` if it doesn't exist,
-  using `AA_TASK_APP_PASSWORD` via bash interpolation — avoids sqlcmd `-v` scripting variables
+- The `smr_app` server login will already have been created using the `MSSQL_USER` env var on sql server container - that will automatically create a user
 - Glob `/migrations/*.sql` with `nullglob` — exits 0 cleanly if the directory is empty
 - For each file in sorted glob order: run `sqlcmd -S db -U sa -b -i "$f"`
 - Fail-fast on any non-zero exit; print the failing filename
@@ -56,7 +55,6 @@ container is ready before this container starts.
 | Variable | Purpose |
 |---|---|
 | `AA_TASK_MSSQL_SA_PASSWORD` | SA password — used to connect to SQL Server |
-| `AA_TASK_APP_PASSWORD` | Passed through to SQL scripts as `$(AA_TASK_APP_PASSWORD)` |
 
 The SQL Server hostname is `db` (the Docker Compose service name).
 

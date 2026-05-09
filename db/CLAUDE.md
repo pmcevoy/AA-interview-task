@@ -79,9 +79,9 @@ arbiter.
 
 - `smr_app` — DML only: `SELECT`, `INSERT`, `UPDATE`, `DELETE` on all tables (used by the Blazor app)
 
-The `smr_app` server LOGIN is created by the migration runner before the SQL files run (the runner
-bootstraps it via `sqlcmd -Q` with bash interpolation). The SQL script only needs to create the
-database USER mapped to that login and grant permissions — no password handling required here.
+The `smr_app` server LOGIN is created by Sql Server via the MSSQL_USER environment variable mechanism.
+The SQL script only needs to create the database USER mapped to that login and grant permissions — no
+password handling required here.
 
 ### Script: `002_seed_data.sql`
 
