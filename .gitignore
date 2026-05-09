@@ -55,3 +55,7 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+**/.claude/settings.local.json
+.idea/
+*.DotSettings.user
