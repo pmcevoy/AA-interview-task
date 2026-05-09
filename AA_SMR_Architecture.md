@@ -4,58 +4,12 @@
 
 ```
 aa-smr-scheduler/
-│
-├── docker-compose.yml              # Orchestrates all three services
-├── README.md                       # Per-spec deliverable
-├── ARCHITECTURE.md                 # This document
-│
-├── db/                             # Database service — own CLAUDE.md
-│   ├── CLAUDE.md
-│   ├── Dockerfile                  # SQL Server + entrypoint wrapper
-│   ├── entrypoint.sh               # Waits for SQL Server ready, runs migrations in order
-│   └── migrations/
-│       ├── 001_create_schema.sql
-│       └── 002_seed_data.sql
-│
-├── migrator/                       # Migration runner service — own CLAUDE.md
-│   ├── CLAUDE.md
-│   ├── Dockerfile                  # Minimal image: sqlcmd + scripts
-│   └── run-migrations.sh           # Iterates migrations/ in order, exits 0 on success
-│
-└── app/                            # Blazor Server application — own CLAUDE.md
-    ├── CLAUDE.md
-    ├── Dockerfile
-    ├── SmrScheduler.sln
-    └── SmrScheduler/
-        ├── Program.cs
-        ├── appsettings.json
-        ├── Data/
-        │   ├── IAppointmentRepository.cs
-        │   ├── AppointmentRepository.cs
-        │   ├── ISlotRepository.cs
-        │   ├── SlotRepository.cs
-        │   ├── IMechanicRepository.cs
-        │   └── MechanicRepository.cs
-        ├── Models/
-        │   ├── Appointment.cs
-        │   ├── AppointmentSlot.cs
-        │   ├── Mechanic.cs
-        │   ├── Branch.cs
-        │   ├── ServiceType.cs
-        │   └── WorkNote.cs
-        ├── Services/
-        │   ├── IBookingService.cs
-        │   └── BookingService.cs
-        └── Components/
-            ├── Layout/
-            │   └── MainLayout.razor
-            ├── Pages/
-            │   ├── Home.razor              # Admin: today's schedule across all mechanics
-            │   ├── BookAppointment.razor   # Booking-agent flow
-            │   ├── MechanicView.razor      # Mechanic: today + tomorrow appointments
-            │   └── AppointmentDetail.razor # Mechanic: detail, work notes, status update
-            └── Shared/
-                └── UserContext.razor       # "Act as" dropdown — auth stand-in
+├── docker-compose.yml
+├── README.md
+├── ARCHITECTURE.md
+├── db/                 # SQL Server container, migration scripts — own CLAUDE.md
+├── migrator/           # Migration runner container — own CLAUDE.md
+└── app/                # Blazor Server application — own CLAUDE.md
 ```
 
 ---
@@ -97,52 +51,57 @@ insert).
 ## Data Model
 
 ```
-Branch
-  Id              INT PK
-  Name            NVARCHAR
-  Address         NVARCHAR
-
-ServiceType
-  Id              INT PK
-  Name            NVARCHAR        -- Inspection | Service | Repair | Diagnostics
-  DurationMinutes INT
-
-Mechanic
-  Id              INT PK
-  Name            NVARCHAR
-  BranchId        INT FK → Branch
-
-AppointmentSlot
-  Id              INT PK
-  BranchId        INT FK → Branch
-  MechanicId      INT FK → Mechanic
-  ServiceTypeId   INT FK → ServiceType
-  StartTime       DATETIME2
-  EndTime         DATETIME2
-  IsAvailable     BIT             -- flipped to 0 on booking
-
-Appointment
-  Id              INT PK
-  ReferenceNumber NVARCHAR        -- unique, generated on insert (e.g. SMR-YYYYMMDD-XXXX)
-  SlotId          INT FK → AppointmentSlot (UNIQUE constraint — enforces no double-booking)
-  CustomerName    NVARCHAR
-  CustomerPhone   NVARCHAR
-  VehicleReg      NVARCHAR
-  ServiceTypeId   INT FK → ServiceType
-  Notes           NVARCHAR(MAX)
-  Status          NVARCHAR        -- Scheduled | InProgress | Completed | NoShow
-  CreatedAt       DATETIME2
-
-WorkNote
-  Id              INT PK
-  AppointmentId   INT FK → Appointment
-  NoteText        NVARCHAR(MAX)
-  CreatedAt       DATETIME2       -- timestamped on insert
+┌─────────┐        ┌─────────────┐        ┌──────────────────┐
+│ Branch  │        │  Mechanic   │        │  ServiceType     │
+├─────────┤        ├─────────────┤        ├──────────────────┤
+│ Id      │◄───────│ BranchId    │        │ Id               │
+│ Name    │        │ Id          │        │ Name             │
+│ Address │        │ Name        │        │ DurationMinutes  │
+└─────────┘        └──────┬──────┘        └────────┬─────────┘
+     │                    │                         │
+     │                    │                         │
+     │             ┌──────▼──────────────────────────▼─────┐
+     └────────────►│            AppointmentSlot            │
+                   ├───────────────────────────────────────┤
+                   │ Id                                    │
+                   │ BranchId                              │
+                   │ MechanicId                            │
+                   │ ServiceTypeId                         │
+                   │ StartTime / EndTime                   │
+                   │ IsAvailable  ← soft UI filter         │
+                   └──────────────────┬────────────────────┘
+                                      │ UNIQUE constraint
+                                      │ (hard double-booking guard)
+                   ┌──────────────────▼─────────────────────┐
+                   │              Appointment               │
+                   ├────────────────────────────────────────┤
+                   │ Id                                     │
+                   │ SlotId                                 │
+                   │ ReferenceNumber  ← unique, generated   │
+                   │ CustomerName                           │
+                   │ CustomerPhone                          │
+                   │ VehicleReg                             │
+                   │ ServiceTypeId                          │
+                   │ Notes                                  │
+                   │ Status  ← Scheduled|InProgress|        │
+                   │           Completed|NoShow             │
+                   │ CreatedAt                              │
+                   └──────────────────┬─────────────────────┘
+                                      │
+                   ┌──────────────────▼─────────────────────┐
+                   │               WorkNote                 │
+                   ├────────────────────────────────────────┤
+                   │ Id                                     │
+                   │ AppointmentId                          │
+                   │ NoteText                               │
+                   │ CreatedAt  ← timestamped on insert     │
+                   └────────────────────────────────────────┘
 ```
 
-**Double-booking prevention:** A `UNIQUE` constraint on `Appointment.SlotId` is the hard guard.
-`AppointmentSlot.IsAvailable` is a soft indicator used by the UI to filter the available slots list.
-Both are updated within the same transaction on booking.
+**Double-booking prevention:** The `UNIQUE` constraint on `Appointment.SlotId` is the hard guard —
+the database will reject a duplicate regardless of application-layer timing. `AppointmentSlot.IsAvailable`
+is a soft indicator used by the UI to filter the available slots list. Both are updated within the
+same transaction on booking.
 
 ---
 
@@ -214,16 +173,4 @@ session to keep context focused and token usage efficient.
 The `app/` session may be further subdivided if context grows — suggested split points are the
 repository/data layer vs. the Blazor component layer.
 
----
 
-## Key Architectural Decisions
-
-| Decision | Choice | Rationale |
-|---|---|---|
-| Frontend | Blazor Server (.NET 8), single project | Stay in C# end-to-end; SignalR gives real-time updates without polling; no separate API needed at this scale |
-| Data access | Dapper | SQL stays explicit and visible; no ORM abstraction; DBA-friendly |
-| Database | Containerised SQL Server 2022 | Consistent across environments; no LocalDB quirks; fully self-contained |
-| Schema management | Plain versioned `.sql` files, idempotent | DBA-readable with no tooling dependency; safe to re-run; pipeline-compatible |
-| App DB permissions | DML only | DDL is the migrator's concern, not the application's |
-| Double-booking | DB UNIQUE constraint + soft IsAvailable flag | Constraint is the hard guard; flag drives UI filtering |
-| Auth stand-in | "Act as" user dropdown | Per spec; real auth is explicitly out of scope |
