@@ -113,31 +113,9 @@ GO
 
 -- ============================================================
 -- Database users
--- Passwords supplied as sqlcmd variables by the migrator:
---   sqlcmd -v AA_TASK_MIGRATOR_PASSWORD=<pwd> -v AA_TASK_APP_PASSWORD=<pwd>
 -- ============================================================
 
-USE master;
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'smr_migrator')
-    CREATE LOGIN smr_migrator WITH PASSWORD = '$(AA_TASK_MIGRATOR_PASSWORD)';
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'smr_app')
-    CREATE LOGIN smr_app WITH PASSWORD = '$(AA_TASK_APP_PASSWORD)';
-GO
-
 USE SmrScheduler;
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'smr_migrator')
-BEGIN
-    CREATE USER smr_migrator FOR LOGIN smr_migrator;
-    ALTER ROLE db_ddladmin  ADD MEMBER smr_migrator;
-    ALTER ROLE db_datareader ADD MEMBER smr_migrator;
-    ALTER ROLE db_datawriter ADD MEMBER smr_migrator;
-END
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'smr_app')
