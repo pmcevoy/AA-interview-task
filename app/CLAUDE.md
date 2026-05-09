@@ -133,7 +133,9 @@ session. The Mechanic Flow pages require a mechanic to be selected; they should 
 | `ConnectionStrings__SmrScheduler` | Full SQL Server connection string |
 
 Connection string format:
-`Server=db,1433;Database=SmrScheduler;User Id=smr_app;Password=<APP_PASSWORD>;TrustServerCertificate=True`
+`Server=db,1433;Database=SmrScheduler;User Id=smr_app;Password=<AA_TASK_APP_PASSWORD>;TrustServerCertificate=True`
+
+`AA_TASK_APP_PASSWORD` is an OS environment variable and should be passed via the docker-compose
 
 ---
 
