@@ -29,12 +29,13 @@ The `app` service does **not** start until the migrator exits successfully.
 
 Base image: `mcr.microsoft.com/mssql/server:2022-latest`
 
-The `Dockerfile` here overrides the entrypoint with `entrypoint.sh`, which:
+No custom entrypoint is needed. The standard image entrypoint runs SQL Server normally. Readiness
+polling is handled by the `migrator` container, which retries until `db:1433` accepts connections
+before executing any scripts. Duplicating that logic here would create two competing definitions of
+"ready".
 
-1. Starts SQL Server in the background (`/opt/mssql/bin/sqlservr &`)
-2. Polls `sqlcmd` until the server accepts connections (retry loop, ~2s sleep)
-3. Signals readiness — the migrator's `depends_on: db` health check triggers from here
-4. Keeps the container running (`wait` on the background process)
+A `Dockerfile` may not be needed at all — if no customisation beyond environment variables is
+required, the `db` service can reference the base image directly in `docker-compose.yml`.
 
 The SA password and other config come from environment variables set in `docker-compose.yml`.
 
@@ -113,10 +114,10 @@ Mechanic.Name) so re-runs are safe.
 
 ## What This Session Should Produce
 
-- `db/Dockerfile`
-- `db/entrypoint.sh`
 - `db/migrations/001_create_schema.sql`
 - `db/migrations/002_seed_data.sql`
+- `db/Dockerfile` — only if customisation beyond the base image is needed; otherwise the base image
+  is referenced directly in `docker-compose.yml`
 
 ---
 
