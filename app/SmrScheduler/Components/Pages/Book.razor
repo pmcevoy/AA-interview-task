@@ -1,0 +1,251 @@
+@page "/book"
+@inject IBranchRepository BranchRepository
+@inject IServiceTypeRepository ServiceTypeRepository
+@inject ISlotRepository SlotRepository
+@inject IBookingService BookingService
+
+<PageTitle>Book Appointment</PageTitle>
+
+<h1>Book Appointment</h1>
+
+@if (_state == BookState.Confirmation && _confirmationRef != null)
+{
+    <div class="alert alert-success">
+        <h4 class="alert-heading">Booking Confirmed!</h4>
+        <p>Reference Number: <strong>@_confirmationRef</strong></p>
+        <hr />
+        <p class="mb-0">
+            <button class="btn btn-success" @onclick="Reset">Book Another Appointment</button>
+        </p>
+    </div>
+}
+else if (_state == BookState.Form && _selectedSlot != null)
+{
+    <div class="mb-3">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="BackToSlots">&larr; Back to slots</button>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header fw-semibold">Selected Slot</div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Date & Time</dt>
+                <dd class="col-sm-9">@_selectedSlot.StartTime.ToString("ddd d MMM yyyy, HH:mm") &ndash; @_selectedSlot.EndTime.ToString("HH:mm")</dd>
+                <dt class="col-sm-3">Mechanic</dt>
+                <dd class="col-sm-9">@_selectedSlot.MechanicName</dd>
+                <dt class="col-sm-3">Branch</dt>
+                <dd class="col-sm-9">@_selectedSlot.BranchName</dd>
+                <dt class="col-sm-3">Service</dt>
+                <dd class="col-sm-9">@_selectedSlot.ServiceTypeName</dd>
+            </dl>
+        </div>
+    </div>
+
+    @if (_bookingError != null)
+    {
+        <div class="alert alert-danger">@_bookingError</div>
+    }
+
+    <div class="card">
+        <div class="card-header fw-semibold">Customer Details</div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Customer Name <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_form.CustomerName" placeholder="Full name" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_form.CustomerPhone" placeholder="e.g. 07700 900123" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Vehicle Registration <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_form.VehicleReg" placeholder="e.g. AB12 CDE" style="text-transform:uppercase" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <textarea class="form-control" rows="3" @bind="_form.Notes" placeholder="Any additional information..."></textarea>
+            </div>
+            <button class="btn btn-primary" @onclick="SubmitBooking" disabled="@_submitting">
+                @(_submitting ? "Booking..." : "Confirm Booking")
+            </button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-header fw-semibold">Filter Slots</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Branch</label>
+                    <select class="form-select" @bind="_filterBranchId">
+                        <option value="">All branches</option>
+                        @foreach (var b in _branches)
+                        {
+                            <option value="@b.Id">@b.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Service Type</label>
+                    <select class="form-select" @bind="_filterServiceTypeId">
+                        <option value="">All service types</option>
+                        @foreach (var st in _serviceTypes)
+                        {
+                            <option value="@st.Id">@st.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" @onclick="SearchSlots">Search</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_slotsLoaded)
+    {
+        if (!_slots.Any())
+        {
+            <div class="alert alert-info">No available slots found for the selected filters in the next 7 days.</div>
+        }
+        else
+        {
+            <h5>Available Slots (@_slots.Count)</h5>
+            <table class="table table-sm table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>Branch</th>
+                        <th>Mechanic</th>
+                        <th>Service Type</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var slot in _slots)
+                    {
+                        <tr>
+                            <td>@slot.StartTime.ToString("ddd d MMM")</td>
+                            <td class="text-nowrap">@slot.StartTime.ToString("HH:mm") &ndash; @slot.EndTime.ToString("HH:mm")</td>
+                            <td>@slot.BranchName</td>
+                            <td>@slot.MechanicName</td>
+                            <td>@slot.ServiceTypeName</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => SelectSlot(slot)">
+                                    Select
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@code {
+    private enum BookState { Filters, Form, Confirmation }
+
+    private class BookingForm
+    {
+        public string CustomerName { get; set; } = "";
+        public string CustomerPhone { get; set; } = "";
+        public string VehicleReg { get; set; } = "";
+        public string? Notes { get; set; }
+    }
+
+    private BookState _state = BookState.Filters;
+    private List<Branch> _branches = new();
+    private List<ServiceType> _serviceTypes = new();
+    private List<AppointmentSlot> _slots = new();
+    private bool _slotsLoaded;
+    private string _filterBranchId = "";
+    private string _filterServiceTypeId = "";
+    private AppointmentSlot? _selectedSlot;
+    private BookingForm _form = new();
+    private string? _bookingError;
+    private bool _submitting;
+    private string? _confirmationRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var branchTask      = BranchRepository.GetAllAsync();
+        var serviceTypeTask = ServiceTypeRepository.GetAllAsync();
+        await Task.WhenAll(branchTask, serviceTypeTask);
+        _branches      = (await branchTask).ToList();
+        _serviceTypes  = (await serviceTypeTask).ToList();
+    }
+
+    private async Task SearchSlots()
+    {
+        int? branchId      = string.IsNullOrEmpty(_filterBranchId)      ? null : int.Parse(_filterBranchId);
+        int? serviceTypeId = string.IsNullOrEmpty(_filterServiceTypeId) ? null : int.Parse(_filterServiceTypeId);
+        _slots = (await SlotRepository.GetAvailableAsync(branchId, serviceTypeId)).ToList();
+        _slotsLoaded = true;
+    }
+
+    private void SelectSlot(AppointmentSlot slot)
+    {
+        _selectedSlot = slot;
+        _form = new BookingForm();
+        _bookingError = null;
+        _state = BookState.Form;
+    }
+
+    private void BackToSlots()
+    {
+        _selectedSlot = null;
+        _state = BookState.Filters;
+    }
+
+    private async Task SubmitBooking()
+    {
+        if (_selectedSlot == null) return;
+        if (string.IsNullOrWhiteSpace(_form.CustomerName) ||
+            string.IsNullOrWhiteSpace(_form.CustomerPhone) ||
+            string.IsNullOrWhiteSpace(_form.VehicleReg))
+        {
+            _bookingError = "Please fill in all required fields.";
+            return;
+        }
+
+        _submitting = true;
+        _bookingError = null;
+
+        var result = await BookingService.BookAsync(
+            _selectedSlot.Id,
+            _form.CustomerName.Trim(),
+            _form.CustomerPhone.Trim(),
+            _form.VehicleReg.Trim().ToUpperInvariant(),
+            _selectedSlot.ServiceTypeId,
+            string.IsNullOrWhiteSpace(_form.Notes) ? null : _form.Notes.Trim());
+
+        _submitting = false;
+
+        if (result.Success)
+        {
+            _confirmationRef = result.ReferenceNumber;
+            _state = BookState.Confirmation;
+        }
+        else
+        {
+            _bookingError = result.Error;
+            // Refresh slots so the taken slot disappears
+            await SearchSlots();
+        }
+    }
+
+    private void Reset()
+    {
+        _state = BookState.Filters;
+        _selectedSlot = null;
+        _confirmationRef = null;
+        _bookingError = null;
+        _form = new BookingForm();
+        _slotsLoaded = false;
+        _slots.Clear();
+    }
+}
