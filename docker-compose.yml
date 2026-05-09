@@ -1,0 +1,23 @@
+services:
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    # TODO: pin to a specific image digest for reproducibility
+    # e.g. mcr.microsoft.com/mssql/server:2022-CU13-ubuntu-22.04
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "${SA_PASSWORD}"
+      MSSQL_DB: "SmrScheduler"
+    ports:
+      - "1433:1433"
+    volumes:
+      - db_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SA_PASSWORD}", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  db_data:
