@@ -1,0 +1,140 @@
+@page "/mechanic"
+@inject UserContext UserContext
+@inject IAppointmentRepository AppointmentRepository
+@inject NavigationManager Nav
+
+<PageTitle>Mechanic View</PageTitle>
+
+<h1>My Schedule</h1>
+
+@if (UserContext.MechanicId == null)
+{
+    <div class="alert alert-warning">
+        Please select your name from the <strong>Act as</strong> dropdown above to view your schedule.
+    </div>
+}
+else
+{
+    <p class="text-muted">Logged in as: <strong>@UserContext.MechanicName</strong></p>
+
+    <h4 class="mt-4">Today &mdash; @DateTime.Today.ToString("dddd, d MMMM")</h4>
+    @AppointmentTable(_todayAppointments)
+
+    <h4 class="mt-4">Tomorrow &mdash; @DateTime.Today.AddDays(1).ToString("dddd, d MMMM")</h4>
+    @AppointmentTable(_tomorrowAppointments)
+}
+
+@code {
+    private List<Appointment> _todayAppointments = new();
+    private List<Appointment> _tomorrowAppointments = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (UserContext.MechanicId == null)
+        {
+            _loading = false;
+            return;
+        }
+
+        var id = UserContext.MechanicId.Value;
+        var todayTask    = AppointmentRepository.GetByMechanicAndDateAsync(id, DateTime.Today);
+        var tomorrowTask = AppointmentRepository.GetByMechanicAndDateAsync(id, DateTime.Today.AddDays(1));
+
+        await Task.WhenAll(todayTask, tomorrowTask);
+
+        _todayAppointments    = (await todayTask).ToList();
+        _tomorrowAppointments = (await tomorrowTask).ToList();
+        _loading = false;
+    }
+
+    private RenderFragment AppointmentTable(List<Appointment> appointments) => __builder =>
+    {
+        if (_loading)
+        {
+            __builder.AddContent(0, "Loading...");
+            return;
+        }
+
+        if (!appointments.Any())
+        {
+            __builder.OpenElement(1, "p");
+            __builder.AddAttribute(2, "class", "text-muted fst-italic");
+            __builder.AddContent(3, "No appointments.");
+            __builder.CloseElement();
+            return;
+        }
+
+        __builder.OpenElement(4, "table");
+        __builder.AddAttribute(5, "class", "table table-sm table-striped table-hover");
+
+        __builder.OpenElement(6, "thead");
+        __builder.AddAttribute(7, "class", "table-dark");
+        __builder.OpenElement(8, "tr");
+        foreach (var h in new[] { "Time", "Customer Name", "Vehicle Reg", "Service Type", "Status" })
+        {
+            __builder.OpenElement(9, "th");
+            __builder.AddContent(10, h);
+            __builder.CloseElement();
+        }
+        __builder.CloseElement();
+        __builder.CloseElement();
+
+        __builder.OpenElement(11, "tbody");
+        foreach (var a in appointments)
+        {
+            __builder.OpenElement(12, "tr");
+            __builder.AddAttribute(13, "style", "cursor:pointer");
+            __builder.AddAttribute(14, "onclick", EventCallback.Factory.Create(__builder, () => Nav.NavigateTo($"/appointment/{a.Id}")));
+
+            __builder.OpenElement(15, "td");
+            __builder.AddAttribute(16, "class", "text-nowrap");
+            __builder.AddContent(17, $"{a.StartTime:HH:mm} – {a.EndTime:HH:mm}");
+            __builder.CloseElement();
+
+            __builder.OpenElement(18, "td");
+            __builder.AddContent(19, a.CustomerName);
+            __builder.CloseElement();
+
+            __builder.OpenElement(20, "td");
+            __builder.OpenElement(21, "code");
+            __builder.AddContent(22, a.VehicleReg);
+            __builder.CloseElement();
+            __builder.CloseElement();
+
+            __builder.OpenElement(23, "td");
+            __builder.AddContent(24, a.ServiceTypeName);
+            __builder.CloseElement();
+
+            __builder.OpenElement(25, "td");
+            __builder.OpenElement(26, "span");
+            __builder.AddAttribute(27, "class", $"badge {StatusBadge(a.Status)}");
+            __builder.AddContent(28, a.Status);
+            __builder.CloseElement();
+            __builder.CloseElement();
+
+            __builder.CloseElement();
+        }
+        __builder.CloseElement();
+        __builder.CloseElement();
+    };
+
+    private static string StatusBadge(string status) => status switch
+    {
+        "Scheduled"  => "bg-primary",
+        "InProgress" => "bg-warning text-dark",
+        "Completed"  => "bg-success",
+        "NoShow"     => "bg-secondary",
+        _            => "bg-secondary"
+    };
+}

@@ -1,0 +1,40 @@
+@inject UserContext UserContext
+@inject IMechanicRepository MechanicRepository
+
+<div class="d-flex align-items-center gap-2">
+    <label class="mb-0 fw-semibold text-nowrap" for="act-as-select">Act as:</label>
+    <select id="act-as-select" class="form-select form-select-sm" style="min-width:180px"
+            @bind="selectedId" @bind:after="OnSelectionChanged">
+        <option value="">Admin / Agent</option>
+        @foreach (var m in _mechanics)
+        {
+            <option value="@m.Id">@m.Name</option>
+        }
+    </select>
+</div>
+
+@code {
+    private List<Mechanic> _mechanics = new();
+    private string selectedId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mechanics = (await MechanicRepository.GetAllAsync()).ToList();
+        selectedId = UserContext.MechanicId?.ToString() ?? "";
+    }
+
+    private void OnSelectionChanged()
+    {
+        if (string.IsNullOrEmpty(selectedId))
+        {
+            UserContext.MechanicId = null;
+            UserContext.MechanicName = null;
+        }
+        else
+        {
+            var id = int.Parse(selectedId);
+            UserContext.MechanicId = id;
+            UserContext.MechanicName = _mechanics.FirstOrDefault(m => m.Id == id)?.Name;
+        }
+    }
+}

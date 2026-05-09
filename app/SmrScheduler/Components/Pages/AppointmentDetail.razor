@@ -1,0 +1,156 @@
+@page "/appointment/{Id:int}"
+@inject IAppointmentRepository AppointmentRepository
+@inject IWorkNoteRepository WorkNoteRepository
+@inject NavigationManager Nav
+
+<PageTitle>Appointment Detail</PageTitle>
+
+@if (_loading)
+{
+    <p>Loading...</p>
+}
+else if (_appointment == null)
+{
+    <div class="alert alert-danger">Appointment not found.</div>
+    <a href="/mechanic" class="btn btn-secondary">Back</a>
+}
+else
+{
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <a href="/mechanic" class="btn btn-outline-secondary btn-sm">&larr; Back</a>
+        <h1 class="mb-0">Appointment @_appointment.ReferenceNumber</h1>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Customer Details</div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Name</dt>
+                        <dd class="col-sm-8">@_appointment.CustomerName</dd>
+                        <dt class="col-sm-4">Phone</dt>
+                        <dd class="col-sm-8">@_appointment.CustomerPhone</dd>
+                        <dt class="col-sm-4">Vehicle Reg</dt>
+                        <dd class="col-sm-8"><code>@_appointment.VehicleReg</code></dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Appointment Details</div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Mechanic</dt>
+                        <dd class="col-sm-8">@_appointment.MechanicName</dd>
+                        <dt class="col-sm-4">Service</dt>
+                        <dd class="col-sm-8">@_appointment.ServiceTypeName</dd>
+                        <dt class="col-sm-4">Time</dt>
+                        <dd class="col-sm-8">@_appointment.StartTime.ToString("ddd d MMM, HH:mm") &ndash; @_appointment.EndTime.ToString("HH:mm")</dd>
+                        <dt class="col-sm-4">Notes</dt>
+                        <dd class="col-sm-8">@(_appointment.Notes ?? "—")</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header fw-semibold d-flex align-items-center gap-3">
+            Status
+            <span class="badge @StatusBadge(_appointment.Status)">@_appointment.Status</span>
+        </div>
+        <div class="card-body d-flex gap-2">
+            @if (_appointment.Status == "Scheduled")
+            {
+                <button class="btn btn-warning" @onclick='() => UpdateStatus("InProgress")'>Start Work</button>
+                <button class="btn btn-secondary" @onclick='() => UpdateStatus("NoShow")'>No Show</button>
+            }
+            else if (_appointment.Status == "InProgress")
+            {
+                <button class="btn btn-success" @onclick='() => UpdateStatus("Completed")'>Mark Completed</button>
+                <button class="btn btn-secondary" @onclick='() => UpdateStatus("NoShow")'>No Show</button>
+            }
+            else
+            {
+                <span class="text-muted fst-italic">No further status changes available.</span>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header fw-semibold">Work Notes</div>
+        <div class="card-body">
+            @if (!_workNotes.Any())
+            {
+                <p class="text-muted fst-italic">No work notes yet.</p>
+            }
+            else
+            {
+                <ul class="list-group list-group-flush mb-3">
+                    @foreach (var note in _workNotes)
+                    {
+                        <li class="list-group-item">
+                            <div class="text-muted small">@note.CreatedAt.ToLocalTime().ToString("ddd d MMM yyyy, HH:mm")</div>
+                            <div>@note.NoteText</div>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <div class="mt-3">
+                <label class="form-label fw-semibold">Add Note</label>
+                <textarea class="form-control mb-2" rows="3" @bind="_newNoteText" placeholder="Enter work note..."></textarea>
+                <button class="btn btn-primary" @onclick="AddNote" disabled="@(string.IsNullOrWhiteSpace(_newNoteText))">
+                    Add Note
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Appointment? _appointment;
+    private List<WorkNote> _workNotes = new();
+    private bool _loading = true;
+    private string _newNoteText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _appointment = await AppointmentRepository.GetByIdAsync(Id);
+        if (_appointment != null)
+            _workNotes = (await WorkNoteRepository.GetByAppointmentAsync(Id)).ToList();
+        _loading = false;
+    }
+
+    private async Task UpdateStatus(string newStatus)
+    {
+        await AppointmentRepository.UpdateStatusAsync(Id, newStatus);
+        _appointment = await AppointmentRepository.GetByIdAsync(Id);
+    }
+
+    private async Task AddNote()
+    {
+        if (string.IsNullOrWhiteSpace(_newNoteText)) return;
+        await WorkNoteRepository.AddAsync(Id, _newNoteText.Trim());
+        _newNoteText = "";
+        _workNotes = (await WorkNoteRepository.GetByAppointmentAsync(Id)).ToList();
+    }
+
+    private static string StatusBadge(string status) => status switch
+    {
+        "Scheduled"  => "bg-primary",
+        "InProgress" => "bg-warning text-dark",
+        "Completed"  => "bg-success",
+        "NoShow"     => "bg-secondary",
+        _            => "bg-secondary"
+    };
+}
