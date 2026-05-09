@@ -5,7 +5,6 @@
 This folder owns everything related to the database container and schema lifecycle:
 
 - The SQL Server Docker image configuration
-- The `entrypoint.sh` wrapper that waits for SQL Server to be ready
 - All numbered migration scripts under `migrations/`
 
 This is **not** the migration runner. The migrator service (in `../migrator/`) connects to this
@@ -76,10 +75,13 @@ Creates the database if it doesn't exist, then creates all tables and constraint
 guard against double-booking — the application layer also checks, but the database is the final
 arbiter.
 
-**Two database users to create:**
+**One database user to create:**
 
-- `smr_migrator` — DDL permissions (used by the migrator service only)
 - `smr_app` — DML only: `SELECT`, `INSERT`, `UPDATE`, `DELETE` on all tables (used by the Blazor app)
+
+The `smr_app` server LOGIN is created by the migration runner before the SQL files run (the runner
+bootstraps it via `sqlcmd -Q` with bash interpolation). The SQL script only needs to create the
+database USER mapped to that login and grant permissions — no password handling required here.
 
 ### Script: `002_seed_data.sql`
 
@@ -103,12 +105,9 @@ Mechanic.Name) so re-runs are safe.
 | Variable | Purpose |
 |---|---|
 | `ACCEPT_EULA` | Must be `Y` |
-| `SA_PASSWORD` | SA password for initial setup |
+| `MSSQL_SA_PASSWORD` | SA password for initial setup |
 | `MSSQL_DB` | Database name to create (e.g. `SmrScheduler`) |
-| `MIGRATOR_USER` | Username for the migrator DB user |
-| `MIGRATOR_PASSWORD` | Password for the migrator DB user |
-| `APP_USER` | Username for the app DB user |
-| `APP_PASSWORD` | Password for the app DB user |
+| `AA_TASK_APP_PASSWORD` | Password for the `smr_app` DB user |
 
 ---
 

@@ -6,8 +6,7 @@ services:
     # e.g. mcr.microsoft.com/mssql/server:2022-CU13-ubuntu-22.04
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
-      MSSQL_DB: "SmrScheduler"
+      MSSQL_SA_PASSWORD: "${AA_TASK_MSSQL_SA_PASSWORD}"
     ports:
       - "1433:1433"
     volumes:
@@ -21,6 +20,16 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  migrator:
+    build: ./migrator
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./db/migrations:/migrations:ro
+    environment:
+      AA_TASK_MSSQL_SA_PASSWORD: "${AA_TASK_MSSQL_SA_PASSWORD}"
 
 volumes:
   db_data:

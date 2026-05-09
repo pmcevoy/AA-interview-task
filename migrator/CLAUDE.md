@@ -29,36 +29,25 @@ Base image: `mcr.microsoft.com/mssql-tools` (provides `sqlcmd` without the full 
 
 The container:
 
-1. Waits for SQL Server to accept connections (retry loop against `db:1433`)
-2. Iterates `migrations/` in strict filename order (`001_...`, `002_...`, etc.)
-3. Executes each `.sql` file via `sqlcmd` using the migrator credentials
-4. Exits `0` on success, non-zero on any failure
+1. Iterates `/migrations/*.sql` in strict filename order (`001_...`, `002_...`, etc.)
+2. Executes each file via `sqlcmd` as `sa` — no dedicated migrator login is needed
+3. Exits `0` on success, non-zero on any failure (sqlcmd `-b` flag enforces this)
 
 The migration scripts themselves live in `../db/migrations/`. Mount that directory into this
 container — do not copy the scripts into this image. This keeps a single source of truth.
+
+No retry loop is needed: Docker's `depends_on: condition: service_healthy` guarantees the `db`
+container is ready before this container starts.
 
 ---
 
 ## Migration Runner Script (`run-migrations.sh`)
 
-Shell script that:
-
-```
-for f in $(ls /migrations/*.sql | sort); do
-    sqlcmd -S db -U $MIGRATOR_USER -P $MIGRATOR_PASSWORD -d $MSSQL_DB -i "$f"
-    if [ $? -ne 0 ]; then
-        echo "Migration failed: $f"
-        exit 1
-    fi
-    echo "Applied: $f"
-done
-exit 0
-```
-
-Key points:
-- `sort` ensures numeric filename order is respected
-- Fail-fast: any script failure stops the run and exits non-zero
-- Scripts are idempotent (enforced in `db/`), so re-running the full set is safe
+- Before running any files: create the `smr_app` server login via `sqlcmd -Q` if it doesn't exist,
+  using `AA_TASK_APP_PASSWORD` via bash interpolation — avoids sqlcmd `-v` scripting variables
+- Glob `/migrations/*.sql` with `nullglob` — exits 0 cleanly if the directory is empty
+- For each file in sorted glob order: run `sqlcmd -S db -U sa -b -i "$f"`
+- Fail-fast on any non-zero exit; print the failing filename
 
 ---
 
@@ -66,9 +55,8 @@ Key points:
 
 | Variable | Purpose |
 |---|---|
-| `MIGRATOR_USER` | DB username with DDL permissions |
-| `MIGRATOR_PASSWORD` | Password for migrator user |
-| `MSSQL_DB` | Target database name |
+| `AA_TASK_MSSQL_SA_PASSWORD` | SA password — used to connect to SQL Server |
+| `AA_TASK_APP_PASSWORD` | Passed through to SQL scripts as `$(AA_TASK_APP_PASSWORD)` |
 
 The SQL Server hostname is `db` (the Docker Compose service name).
 
