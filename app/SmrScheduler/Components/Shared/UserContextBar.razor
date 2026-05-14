@@ -36,5 +36,6 @@
             UserContext.MechanicId = id;
             UserContext.MechanicName = _mechanics.FirstOrDefault(m => m.Id == id)?.Name;
         }
+        UserContext.NotifyChanged();
     }
 }

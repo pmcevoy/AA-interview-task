@@ -1,4 +1,5 @@
 @page "/mechanic"
+@implements IDisposable
 @inject UserContext UserContext
 @inject IAppointmentRepository AppointmentRepository
 @inject NavigationManager Nav
@@ -31,12 +32,19 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        UserContext.OnChange += OnUserContextChanged;
         await LoadAsync();
     }
 
-    protected override async Task OnParametersSetAsync()
+    private async void OnUserContextChanged()
     {
         await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        UserContext.OnChange -= OnUserContextChanged;
     }
 
     private async Task LoadAsync()
